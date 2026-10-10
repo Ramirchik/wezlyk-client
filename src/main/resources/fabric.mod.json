@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "wezlyk-client",
+  "version": "${version}",
+  "name": "Wezlyk Client",
+  "description": "Minimal Liquid Glass interface: title screen, ClickGUI and account manager.",
+  "authors": ["Wezlyk"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.wezlyk.client.WezlykClient"]
+  },
+  "mixins": ["wezlyk.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.16.10",
+    "minecraft": "~1.21.4",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
