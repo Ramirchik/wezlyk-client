@@ -1,23 +1,61 @@
 package dev.wezlyk.client.ui;
 
+import dev.wezlyk.client.theme.Theme;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 
 /**
  * Drawing helpers for the Minimal Liquid Glass look.
- * Glass is imitated with simple fills (translucent graphite, a faint top sheen, a thin light border),
+ * Glass is imitated with simple fills (translucent panel, a faint top sheen, a thin border),
  * so there is no real blur pass and nothing that can destabilise rendering.
+ * <p>
+ * The colour fields are not constants any more: apply(Theme) rewrites them when the theme changes,
+ * so every screen that reads them follows the active theme.
  */
 public final class Glass {
-    public static final int BG = 0xFF080808;
-    public static final int PANEL = 0xE6151515;
-    public static final int BORDER = 0xFF2B2B2D;
-    public static final int TEXT = 0xFFF2F2F2;
-    public static final int MUTED = 0xFF8C8C91;
-    public static final int ACCENT = 0xFFB9C1CC;
     public static final int RADIUS = 6;
 
+    public static int BG, BG_TOP, PANEL, BORDER;
+    public static int CARD, CARD_HOVER, FIELD;
+    public static int TEXT, MUTED, FAINT, ACCENT;
+    public static int SEL_RING, TAB_SEL;
+    public static int SWITCH_OFF, SWITCH_ON, KNOB_OFF, KNOB_ON;
+    public static int SHEEN, DIM, SEP;
+    public static int BTN, BTN_HOVER, BTN_BORDER, BTN_BORDER_HOVER, BTN_TEXT;
+
+    static {
+        apply(Theme.DARK_CLASSIC);
+    }
+
     private Glass() {}
+
+    public static void apply(Theme t) {
+        BG = t.bg();
+        BG_TOP = t.bgTop();
+        PANEL = t.panel();
+        BORDER = t.border();
+        CARD = t.card();
+        CARD_HOVER = t.cardHover();
+        FIELD = t.field();
+        TEXT = t.text();
+        MUTED = t.muted();
+        FAINT = t.faint();
+        ACCENT = t.accent();
+        SEL_RING = t.selRing();
+        TAB_SEL = t.tabSel();
+        SWITCH_OFF = t.switchOff();
+        SWITCH_ON = t.switchOn();
+        KNOB_OFF = t.knobOff();
+        KNOB_ON = t.knobOn();
+        SHEEN = t.sheen();
+        DIM = t.dim();
+        SEP = t.sep();
+        BTN = t.btn();
+        BTN_HOVER = t.btnHover();
+        BTN_BORDER = t.btnBorder();
+        BTN_BORDER_HOVER = t.btnBorderHover();
+        BTN_TEXT = t.btnText();
+    }
 
     /** Filled rounded rectangle drawn as scanlines. */
     public static void round(DrawContext c, int x, int y, int w, int h, int r, int color) {
@@ -53,12 +91,12 @@ public final class Glass {
         c.fill(x + w - 1, y + r, x + w, y + h - r, color);
     }
 
-    /** Main glass surface: translucent graphite, soft top sheen, thin border. */
+    /** Main glass surface: translucent panel, soft top sheen, thin border. */
     public static void panel(DrawContext c, int x, int y, int w, int h) {
         int r = RADIUS + 2;
         round(c, x, y, w, h, r, PANEL);
-        c.fillGradient(x + r, y + 1, x + w - r, y + 1 + Math.max(4, h / 5), 0x14FFFFFF, 0x00FFFFFF);
-        c.fill(x + r, y + 1, x + w - r, y + 2, 0x22FFFFFF);
+        c.fillGradient(x + r, y + 1, x + w - r, y + 1 + Math.max(4, h / 5), SHEEN, SHEEN & 0x00FFFFFF);
+        c.fill(x + r, y + 1, x + w - r, y + 2, SHEEN);
         ring(c, x, y, w, h, r, BORDER);
     }
 
@@ -72,6 +110,12 @@ public final class Glass {
         return out;
     }
 
+    /** Scales the alpha channel of an ARGB colour by a (0..1). */
+    public static int alpha(int color, float a) {
+        int na = Math.max(0, Math.min(255, Math.round(((color >>> 24) & 255) * a)));
+        return (na << 24) | (color & 0xFFFFFF);
+    }
+
     public static void text(DrawContext c, TextRenderer tr, String s, int x, int y, int color) {
         c.drawText(tr, s, x, y, color, false);
     }
@@ -80,11 +124,11 @@ public final class Glass {
         c.drawText(tr, s, cx - tr.getWidth(s) / 2, y, color, false);
     }
 
-    /** Fade in from black over the given duration. */
+    /** Fade in from the theme background over the given duration. */
     public static void fadeIn(DrawContext c, int w, int h, long openedNanos, float millis) {
         float t = Math.min(1f, (System.nanoTime() - openedNanos) / (millis * 1_000_000f));
         if (t < 1f) {
-            c.fill(0, 0, w, h, ((int) ((1f - t) * 255f)) << 24);
+            c.fill(0, 0, w, h, (((int) ((1f - t) * 255f)) << 24) | (BG & 0xFFFFFF));
         }
     }
 }

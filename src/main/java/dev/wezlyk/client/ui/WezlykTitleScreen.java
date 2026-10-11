@@ -70,7 +70,7 @@ public class WezlykTitleScreen extends Screen {
     @Override
     public void render(DrawContext c, int mx, int my, float delta) {
         c.fill(0, 0, width, height, Glass.BG);
-        c.fillGradient(0, 0, width, height / 2, 0xFF101012, Glass.BG);
+        c.fillGradient(0, 0, width, height / 2, Glass.BG_TOP, Glass.BG);
 
         // Wordmark
         String word = "WEZLYK";
@@ -107,7 +107,7 @@ public class WezlykTitleScreen extends Screen {
         // Thin silver accent line with a slow pulse
         double t = (System.nanoTime() - opened) / 1_000_000_000.0;
         int alpha = 70 + (int) (40 * Math.sin(t * 1.4));
-        c.fill(width / 2 - 10, sy + 14, width / 2 + 10, sy + 15, (alpha << 24) | 0xB9C1CC);
+        c.fill(width / 2 - 10, sy + 14, width / 2 + 10, sy + 15, (alpha << 24) | (Glass.ACCENT & 0xFFFFFF));
 
         for (GlassButton b : buttons) {
             b.render(c, textRenderer, mx, my);
@@ -115,7 +115,7 @@ public class WezlykTitleScreen extends Screen {
         accountChip.render(c, textRenderer, mx, my);
 
         String ver = "Minecraft 1.21.4";
-        Glass.text(c, textRenderer, ver, width - textRenderer.getWidth(ver) - 8, height - 16, 0xFF55555A);
+        Glass.text(c, textRenderer, ver, width - textRenderer.getWidth(ver) - 8, height - 16, Glass.FAINT);
 
         Glass.fadeIn(c, width, height, opened, 220f);
     }

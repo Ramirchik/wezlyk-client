@@ -84,9 +84,9 @@ public class AccountManagerScreen extends Screen {
 
     private void card(DrawContext c, int x, int y, int w, int h, boolean active, float hov,
                       String name, String tag, boolean removable, int mx, int my) {
-        Glass.round(c, x, y, w, h, Glass.RADIUS - 1, Glass.mix(0xFF1A1A1B, 0xFF222325, hov));
+        Glass.round(c, x, y, w, h, Glass.RADIUS - 1, Glass.mix(Glass.CARD, Glass.CARD_HOVER, hov));
         if (active) {
-            Glass.ring(c, x, y, w, h, Glass.RADIUS - 1, 0xFF5B616A);
+            Glass.ring(c, x, y, w, h, Glass.RADIUS - 1, Glass.SEL_RING);
         }
         int ty = y + (h - 8) / 2;
         int right = x + w - 10;
@@ -103,12 +103,12 @@ public class AccountManagerScreen extends Screen {
     @Override
     public void render(DrawContext c, int mx, int my, float delta) {
         c.fill(0, 0, width, height, Glass.BG);
-        c.fillGradient(0, 0, width, height / 2, 0xFF101012, Glass.BG);
+        c.fillGradient(0, 0, width, height / 2, Glass.BG_TOP, Glass.BG);
         Glass.panel(c, px, py, pw, ph);
 
         Glass.text(c, textRenderer, "Accounts", px + 14, py + 13, Glass.TEXT);
         done.render(c, textRenderer, mx, my);
-        c.fill(px + 10, py + 33, px + pw - 10, py + 34, 0x1FFFFFFF);
+        c.fill(px + 10, py + 33, px + pw - 10, py + 34, Glass.SEP);
 
         // Launcher account (read-only identity, click to restore)
         int cx = px + 10, cw = pw - 20;
@@ -134,8 +134,8 @@ public class AccountManagerScreen extends Screen {
 
         // Add row
         int fx = px + 12;
-        Glass.round(c, fx, fieldY, fieldW, 22, Glass.RADIUS, 0xFF101011);
-        Glass.ring(c, fx, fieldY, fieldW, 22, Glass.RADIUS, field.isFocused() ? 0xFF4A4F57 : 0xFF262628);
+        Glass.round(c, fx, fieldY, fieldW, 22, Glass.RADIUS, Glass.FIELD);
+        Glass.ring(c, fx, fieldY, fieldW, 22, Glass.RADIUS, field.isFocused() ? Glass.SEL_RING : Glass.BORDER);
         field.render(c, mx, my, delta);
         add.render(c, textRenderer, mx, my);
 
@@ -143,7 +143,7 @@ public class AccountManagerScreen extends Screen {
             ? "3-16 characters: letters, digits, _"
             : "Offline profiles only. Microsoft sign-in stays in your launcher.";
         Glass.text(c, textRenderer, textRenderer.trimToWidth(hint, pw - 24), px + 12, py + ph - 18,
-            error ? Glass.ACCENT : 0xFF5F5F64);
+            error ? Glass.ACCENT : Glass.FAINT);
 
         Glass.fadeIn(c, width, height, opened, 200f);
     }

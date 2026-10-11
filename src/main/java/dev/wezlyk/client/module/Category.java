@@ -1,8 +1,10 @@
 package dev.wezlyk.client.module;
 
+/** Module categories. Themes and Configs are ClickGUI pages, not module categories. */
 public enum Category {
-    VISUAL("Visual"),
-    MOVEMENT("Movement");
+    COMBAT("Combat"),
+    MOVEMENT("Movement"),
+    RENDER("Render");
 
     public final String label;
 
