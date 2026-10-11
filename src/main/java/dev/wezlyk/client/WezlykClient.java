@@ -47,7 +47,6 @@ public class WezlykClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             Profiles.tick();
-            Modules.tickBinds(client);
             while (openGui.wasPressed()) {
                 if (client.currentScreen == null) {
                     ClickGuiHost.open(client, null);

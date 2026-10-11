@@ -24,7 +24,6 @@ public final class Module {
     private boolean enabled;
     private int bind = GLFW.GLFW_KEY_UNKNOWN;
     private int defaultBind = GLFW.GLFW_KEY_UNKNOWN;
-    private boolean prevDown;
     private boolean transientState;
 
     Module(String name, Category category, String description, boolean defaultEnabled) {
@@ -102,7 +101,6 @@ public final class Module {
 
     public void setBind(int key) {
         bind = key;
-        prevDown = false;
         Autosave.markDirty();
     }
 
@@ -111,19 +109,10 @@ public final class Module {
         return InputUtil.Type.KEYSYM.createFromCode(bind).getLocalizedText().getString();
     }
 
-    /** Returns true once per physical key press. Always keeps the edge state current. */
-    boolean pollBind(long window) {
-        boolean down = bind >= 0 && InputUtil.isKeyPressed(window, bind);
-        boolean edge = down && !prevDown;
-        prevDown = down;
-        return edge;
-    }
-
     /** Back to factory state: disabled (or the module's default), no bind, default settings. */
     public void resetDefaults() {
         if (!transientState) restore(defaultEnabled);
         bind = defaultBind;
-        prevDown = false;
         for (Setting<?> s : settings) {
             s.reset();
         }

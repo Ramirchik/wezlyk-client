@@ -199,20 +199,28 @@ public final class Modules {
         }
     }
 
-    /** Fires key binds. Edge state is tracked every tick so holding a key never re-triggers later. */
-    public static void tickBinds(MinecraftClient mc) {
-        long window = mc.getWindow().getHandle();
+    /**
+     * Called from the keyboard event (KeyboardMixin) for every key PRESS, before the game or any screen
+     * sees it. One physical press gives exactly one call, so a tap can never be missed or counted twice.
+     * Only acts while no screen is open (an open ClickGUI handles its own keys, which is what closes it).
+     *
+     * @return true when the key belongs to a module bind and was consumed, so nothing else (including a
+     *         screen opened by this very press) receives the same event
+     */
+    public static boolean onKey(MinecraftClient mc, long window, int key) {
+        if (key < 0 || mc.getWindow().getHandle() != window) return false;
+        if (mc.currentScreen != null || mc.player == null) return false;
+        boolean used = false;
         for (Module m : ALL) {
-            if (!m.hasBind()) continue;
-            boolean pressed = m.pollBind(window);
-            if (pressed && mc.currentScreen == null) {
-                if (m == CLICKGUI) {
-                    ClickGuiHost.open(mc, null); // the module mirrors the open window, it is not toggled directly
-                } else {
-                    m.toggle();
-                }
+            if (m.bind() != key) continue;
+            used = true;
+            if (m == CLICKGUI) {
+                ClickGuiHost.open(mc, null); // the module mirrors the open window, it is not toggled directly
+            } else {
+                m.toggle();
             }
         }
+        return used;
     }
 
     /** Returns a human-readable reason when the key can't be assigned to this module, otherwise null. */
