@@ -1,5 +1,6 @@
 package dev.wezlyk.client.hud;
 
+import dev.wezlyk.client.fake.FakePlayerManager;
 import dev.wezlyk.client.module.Modules;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.player.PlayerEntity;
@@ -37,7 +38,7 @@ public final class TargetTracker {
             id = null;
             return null;
         }
-        PlayerEntity p = mc.world.getPlayerByUuid(id);
+        PlayerEntity p = FakePlayerManager.isFakeId(id) ? FakePlayerManager.get() : mc.world.getPlayerByUuid(id);
         if (p == null || p.isRemoved() || !p.isAlive() || p.getHealth() <= 0f) {
             id = null;
             return null;

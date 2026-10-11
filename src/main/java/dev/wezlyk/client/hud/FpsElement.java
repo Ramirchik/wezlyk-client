@@ -10,7 +10,7 @@ import net.minecraft.client.gui.DrawContext;
 /** The original FPS readout, now a movable plate. */
 public final class FpsElement extends HudElement {
     public FpsElement() {
-        super("fps", Modules.FPS, 0, 0, 6, 6);
+        super("fps", Modules.HUD_FPS, 0, 0, 6, 6);
     }
 
     private static String text() {

@@ -17,7 +17,7 @@ public final class KeybindsElement extends HudElement {
     private static final int ROW = 11;
 
     public KeybindsElement() {
-        super("keybinds", Modules.KEYBINDS, 2, 0, -6, 40);
+        super("keybinds", Modules.HUD_KEYBINDS, 2, 0, -6, 40);
     }
 
     private static List<Module> rows() {

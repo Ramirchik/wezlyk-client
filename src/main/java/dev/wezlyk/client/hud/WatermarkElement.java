@@ -13,7 +13,7 @@ public final class WatermarkElement extends HudElement {
     private static final int H = 16;
 
     public WatermarkElement() {
-        super("watermark", Modules.WATERMARK, 1, 0, 0, 6);
+        super("watermark", Modules.HUD_WATERMARK, 1, 0, 0, 6);
     }
 
     private static String fps() {
@@ -40,7 +40,7 @@ public final class WatermarkElement extends HudElement {
         int w = width(tr);
         plate(c, x, y, w, H, H / 2);
         int tx = x + 6 + 2;
-        c.drawText(tr, NAME, tx, y + (H - 8) / 2, t.hudText(), false);
+        c.drawText(tr, NAME, tx, y + (H - 8) / 2, t.accent(), false);
         if (Modules.WATERMARK_FPS.get()) {
             int sx = tx + tr.getWidth(NAME) + 6;
             c.fill(sx, y + 4, sx + 1, y + H - 4, t.hudBorder());

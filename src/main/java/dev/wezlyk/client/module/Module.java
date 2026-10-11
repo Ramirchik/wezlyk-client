@@ -23,7 +23,9 @@ public final class Module {
     private final List<Setting<?>> settings = new ArrayList<>();
     private boolean enabled;
     private int bind = GLFW.GLFW_KEY_UNKNOWN;
+    private int defaultBind = GLFW.GLFW_KEY_UNKNOWN;
     private boolean prevDown;
+    private boolean transientState;
 
     Module(String name, Category category, String description, boolean defaultEnabled) {
         this.name = name;
@@ -64,8 +66,30 @@ public final class Module {
     }
 
     public void toggle() {
-        enabled = !enabled;
-        Autosave.markDirty();
+        setEnabled(!enabled);
+    }
+
+    public void setEnabled(boolean value) {
+        if (enabled == value) return;
+        enabled = value;
+        if (!transientState) Autosave.markDirty();
+    }
+
+    /**
+     * A module whose on/off state is not stored in profiles (it only mirrors something that is open
+     * right now, such as the ClickGUI window). Its bind and settings are still saved.
+     */
+    public Module transientState() {
+        transientState = true;
+        restore(false);
+        return this;
+    }
+
+    /** Key used when nothing is stored (and after a reset). */
+    public Module defaultBind(int key) {
+        defaultBind = key;
+        bind = key;
+        return this;
     }
 
     public int bind() {
@@ -97,8 +121,8 @@ public final class Module {
 
     /** Back to factory state: disabled (or the module's default), no bind, default settings. */
     public void resetDefaults() {
-        restore(defaultEnabled);
-        bind = GLFW.GLFW_KEY_UNKNOWN;
+        if (!transientState) restore(defaultEnabled);
+        bind = defaultBind;
         prevDown = false;
         for (Setting<?> s : settings) {
             s.reset();
@@ -107,7 +131,7 @@ public final class Module {
 
     public JsonObject save() {
         JsonObject o = new JsonObject();
-        o.addProperty("enabled", enabled);
+        if (!transientState) o.addProperty("enabled", enabled);
         o.addProperty("bind", bind);
         JsonObject s = new JsonObject();
         for (Setting<?> setting : settings) {
@@ -123,7 +147,7 @@ public final class Module {
     public void load(JsonObject o) {
         try {
             JsonElement e = o.get("enabled");
-            if (e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isBoolean()) {
+            if (!transientState && e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isBoolean()) {
                 restore(e.getAsBoolean());
             }
         } catch (Exception ignored) {

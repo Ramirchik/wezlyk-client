@@ -1,5 +1,6 @@
 package dev.wezlyk.client.hud;
 
+import dev.wezlyk.client.fake.FakePlayerManager;
 import dev.wezlyk.client.module.Modules;
 import dev.wezlyk.client.theme.Theme;
 import dev.wezlyk.client.theme.Themes;
@@ -15,7 +16,7 @@ public final class TargetInfoElement extends HudElement {
     private static final int H = 32;
 
     public TargetInfoElement() {
-        super("target_info", Modules.TARGET_INFO, 1, 1, 0, 40);
+        super("target_info", Modules.HUD_TARGET, 1, 1, 0, 40);
     }
 
     private static String fmt(float v) {
@@ -27,7 +28,8 @@ public final class TargetInfoElement extends HudElement {
     }
 
     private static String nameText(PlayerEntity p) {
-        return p == null ? "Target" : p.getName().getString();
+        if (p == null) return "Target";
+        return FakePlayerManager.isFake(p) ? "Fake Player (test)" : p.getName().getString();
     }
 
     @Override

@@ -10,7 +10,7 @@ import net.minecraft.client.gui.DrawContext;
 /** The original coordinates readout, now a movable plate. */
 public final class CoordsElement extends HudElement {
     public CoordsElement() {
-        super("coords", Modules.COORDS, 0, 0, 6, 24);
+        super("coords", Modules.HUD_COORDS, 0, 0, 6, 24);
     }
 
     private static String text() {

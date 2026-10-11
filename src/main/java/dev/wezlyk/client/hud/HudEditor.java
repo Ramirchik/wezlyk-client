@@ -50,7 +50,7 @@ public final class HudEditor {
             boolean wantEnabled = pass == 0;
             for (int i = all.size() - 1; i >= 0; i--) {
                 HudElement e = all.get(i);
-                if (e.module.enabled() != wantEnabled) continue;
+                if (e.shown() != wantEnabled) continue;
                 int[] b = bounds(e);
                 if (mx >= b[0] && mx < b[0] + b[2] && my >= b[1] && my < b[1] + b[3]) {
                     return e;
@@ -110,7 +110,7 @@ public final class HudEditor {
         int accent = Themes.current().accent() & 0xFFFFFF;
 
         for (HudElement e : HudManager.ELEMENTS) {
-            boolean on = e.module.enabled();
+            boolean on = e.shown();
             int[] b = bounds(e);
             int x = b[0] - 2, y = b[1] - 2, w = b[2] + 4, h = b[3] + 4;
             boolean hot = e == hovered || e == selected;
@@ -121,7 +121,7 @@ public final class HudEditor {
                 Glass.ring(c, x, y, w, h, 4, ((on ? 0x66 : 0x33) << 24) | accent);
             }
             int ty = y >= 11 ? y - 10 : y + h + 2;
-            c.drawText(tr, on ? e.module.name : e.module.name + " (off)", x, ty, on ? 0xFFFFFFFF : 0xFFB0B0B0, true);
+            c.drawText(tr, on ? e.label() : e.label() + " (off)", x, ty, on ? 0xFFFFFFFF : 0xFFB0B0B0, true);
         }
     }
 }

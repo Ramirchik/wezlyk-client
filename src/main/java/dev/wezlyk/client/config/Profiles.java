@@ -116,6 +116,7 @@ public final class Profiles {
             // keep default theme
         }
         JsonObject mods = obj(root, "modules");
+        Modules.migrateLegacyProfile(mods);
         for (Module m : Modules.all()) {
             JsonObject mo = obj(mods, m.name);
             if (mo != null) {

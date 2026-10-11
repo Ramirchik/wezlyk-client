@@ -6,7 +6,7 @@ import dev.wezlyk.client.ui.Glass;
 import java.util.List;
 
 public final class Themes {
-    public static final List<Theme> ALL = List.of(Theme.DARK_CLASSIC, Theme.SAKURA, Theme.LIGHT);
+    public static final List<Theme> ALL = List.of(Theme.DARK_CLASSIC, Theme.SAKURA, Theme.LIGHT, Theme.THUNDERSTORM);
     private static Theme current = Theme.DARK_CLASSIC;
 
     private Themes() {}

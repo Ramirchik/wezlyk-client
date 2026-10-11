@@ -1,41 +1,50 @@
 package dev.wezlyk.client.module;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import dev.wezlyk.client.config.Config;
+import dev.wezlyk.client.setting.ActionSetting;
 import dev.wezlyk.client.setting.BoolSetting;
+import dev.wezlyk.client.setting.ColorSetting;
 import dev.wezlyk.client.setting.LabelSetting;
 import dev.wezlyk.client.setting.ModeSetting;
 import dev.wezlyk.client.setting.SliderSetting;
+import dev.wezlyk.client.ui.ClickGuiHost;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
+
+import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
 import java.util.Locale;
 
 /** The module registry. Every module here has real logic behind it. */
 public final class Modules {
-    // Combat
-    public static final Module TARGET_INFO = new Module("Target Info", Category.COMBAT,
-        "Shows name and health of the last player you hit.", true);
-    public static final SliderSetting TARGET_TIMEOUT =
-        TARGET_INFO.add(new SliderSetting("Hide after (s)", 4.0, 1.0, 10.0, 0.5, 1));
+    // Combat: intentionally empty ("SOON..." is shown by the ClickGUI)
 
     // Movement
     public static final Module SPRINT = new Module("Toggle Sprint", Category.MOVEMENT,
         "Keeps you sprinting while you walk forward.", false);
 
-    // Render
-    public static final Module FPS = new Module("FPS", Category.RENDER,
-        "Frame rate readout on the HUD.", false);
-    public static final Module COORDS = new Module("Coordinates", Category.RENDER,
-        "Block coordinates readout on the HUD.", false);
-    public static final Module WATERMARK = new Module("Watermark", Category.RENDER,
-        "Client name pill at the top of the screen.", true);
-    public static final BoolSetting WATERMARK_FPS =
-        WATERMARK.add(new BoolSetting("Show FPS", true));
-    public static final Module KEYBINDS = new Module("Keybinds", Category.RENDER,
-        "Lists enabled modules that have a key assigned.", true);
+    // Render: ClickGUI itself. Its on/off state mirrors the open window and is never stored.
+    public static final Module CLICKGUI = new Module("ClickGUI", Category.RENDER,
+        "Opens the Wezlyk menu. Middle click to change the key.", false).transientState()
+        .defaultBind(GLFW.GLFW_KEY_RIGHT_SHIFT);
+
+    // Render: the one HUD entry. Left click = whole HUD on/off, right click = per-element switches.
+    public static final Module HUD = new Module("HUD", Category.RENDER,
+        "All on-screen overlays. Right click to choose which ones show.", true);
+    public static final BoolSetting HUD_WATERMARK = HUD.add(new BoolSetting("Wezlyk Watermark", true));
+    public static final BoolSetting WATERMARK_FPS = HUD.add(new BoolSetting("Watermark FPS", true));
+    public static final BoolSetting HUD_FPS = HUD.add(new BoolSetting("FPS", false));
+    public static final BoolSetting HUD_COORDS = HUD.add(new BoolSetting("Coordinates", false));
+    public static final BoolSetting HUD_TARGET = HUD.add(new BoolSetting("Target Info", true));
+    public static final SliderSetting TARGET_TIMEOUT =
+        HUD.add(new SliderSetting("Target hide after (s)", 4.0, 1.0, 10.0, 0.5, 1));
+    public static final BoolSetting HUD_KEYBINDS = HUD.add(new BoolSetting("Keybinds", true));
+
     public static final Module ASPECT = new Module("Aspect Ratio", Category.RENDER,
         "Changes the aspect ratio of the game image (not the window).", false);
     public static final ModeSetting ASPECT_MODE =
@@ -44,10 +53,60 @@ public final class Modules {
     public static final LabelSetting ASPECT_INFO =
         ASPECT.add(new LabelSetting("Current", Modules::aspectLabel));
 
-    private static final List<Module> ALL =
-        List.of(TARGET_INFO, SPRINT, FPS, COORDS, WATERMARK, KEYBINDS, ASPECT);
+    public static final Module JUMP_CIRCLE = new Module("Jump Circle", Category.RENDER,
+        "A ring that spreads from your feet when you jump.", false);
+    public static final ModeSetting JC_ANIM = JUMP_CIRCLE.add(new ModeSetting("Animation", "Expand", "Expand", "Shrink"));
+    public static final ModeSetting JC_COLOR_MODE = JUMP_CIRCLE.add(new ModeSetting("Color", "Auto", "Auto", "Custom"));
+    public static final ColorSetting JC_COLOR = custom(JUMP_CIRCLE, JC_COLOR_MODE);
+    public static final SliderSetting JC_OPACITY = JUMP_CIRCLE.add(new SliderSetting("Opacity (%)", 70, 10, 100, 5, 0));
+    public static final SliderSetting JC_SIZE = JUMP_CIRCLE.add(new SliderSetting("Size", 1.5, 0.5, 4.0, 0.1, 1));
+    public static final SliderSetting JC_DURATION = JUMP_CIRCLE.add(new SliderSetting("Duration (s)", 1.0, 0.3, 3.0, 0.1, 1));
+
+    public static final Module CHINA_HAT = new Module("China Hat", Category.RENDER,
+        "A translucent cone above your head (third person).", false);
+    public static final SliderSetting HAT_SIZE = CHINA_HAT.add(new SliderSetting("Size", 1.0, 0.5, 2.0, 0.05, 2));
+    public static final ModeSetting HAT_COLOR_MODE = CHINA_HAT.add(new ModeSetting("Color", "Auto", "Auto", "Custom"));
+    public static final ColorSetting HAT_COLOR = custom(CHINA_HAT, HAT_COLOR_MODE);
+    public static final SliderSetting HAT_OPACITY = CHINA_HAT.add(new SliderSetting("Opacity (%)", 35, 5, 100, 5, 0));
+    public static final BoolSetting HAT_OUTLINE = CHINA_HAT.add(new BoolSetting("Outline", true));
+    public static final SliderSetting HAT_OUTLINE_OPACITY = CHINA_HAT.add(outlineOpacity());
+
+    public static final Module PREDICTIONS = new Module("Predictions", Category.RENDER,
+        "Shows where a held Ender Pearl or Splash Potion will land.", false);
+    public static final BoolSetting PRED_PEARL = PREDICTIONS.add(new BoolSetting("Ender Pearl", true));
+    public static final BoolSetting PRED_POTION = PREDICTIONS.add(new BoolSetting("Splash Potion", true));
+    public static final ModeSetting PRED_COLOR_MODE = PREDICTIONS.add(new ModeSetting("Color", "Auto", "Auto", "Custom"));
+    public static final ColorSetting PRED_COLOR = custom(PREDICTIONS, PRED_COLOR_MODE);
+    public static final SliderSetting PRED_OPACITY = PREDICTIONS.add(new SliderSetting("Opacity (%)", 80, 10, 100, 5, 0));
+    public static final SliderSetting PRED_WIDTH = PREDICTIONS.add(new SliderSetting("Line width (px)", 2.0, 1.0, 6.0, 0.5, 1));
+    public static final BoolSetting PRED_IMPACT = PREDICTIONS.add(new BoolSetting("Impact point", true));
+
+    public static final Module FAKE_PLAYER = new Module("Fake Player", Category.RENDER,
+        "Local training dummy. Exists only on your screen.", false).transientState();
+    public static final BoolSetting FAKE_PROT = FAKE_PLAYER.add(new BoolSetting("Model Protection IV", true));
+    public static final ActionSetting FAKE_CREATE = FAKE_PLAYER.add(new ActionSetting("Create"));
+    public static final ActionSetting FAKE_REMOVE = FAKE_PLAYER.add(new ActionSetting("Remove"));
+    public static final ActionSetting FAKE_RESET = FAKE_PLAYER.add(new ActionSetting("Reset"));
+    public static final ActionSetting FAKE_PLACE = FAKE_PLAYER.add(new ActionSetting("Place at crosshair"));
+    public static final ActionSetting FAKE_HIT = FAKE_PLAYER.add(new ActionSetting("Test hit (4 HP)"));
+
+    private static final List<Module> ALL = List.of(SPRINT, CLICKGUI, HUD, ASPECT, JUMP_CIRCLE, CHINA_HAT,
+        PREDICTIONS, FAKE_PLAYER);
 
     private Modules() {}
+
+    /** "Custom Color" HSL palette, only shown while the Color mode is Custom. */
+    private static ColorSetting custom(Module m, ModeSetting mode) {
+        ColorSetting c = m.add(new ColorSetting("Custom Color", 0.14f, 1.0f, 0.55f));
+        c.visibleWhen(() -> mode.get().equals("Custom"));
+        return c;
+    }
+
+    private static SliderSetting outlineOpacity() {
+        SliderSetting s = new SliderSetting("Outline opacity (%)", 80, 10, 100, 5, 0);
+        s.visibleWhen(HAT_OUTLINE::get);
+        return s;
+    }
 
     private static SliderSetting customRatioSlider() {
         SliderSetting s = new SliderSetting("Custom ratio", 1.78, 0.5, 2.5, 0.01, 2);
@@ -93,6 +152,51 @@ public final class Modules {
                 m.restore(saved);
             }
         }
+        for (var e : cfg.modules.entrySet()) {
+            BoolSetting legacy = legacyHudSwitch(e.getKey());
+            if (legacy != null && e.getValue() != null) legacy.set(e.getValue());
+        }
+    }
+
+    /** Old builds had one module per overlay; they are now switches inside the HUD module. */
+    private static BoolSetting legacyHudSwitch(String oldModuleName) {
+        return switch (oldModuleName) {
+            case "Watermark" -> HUD_WATERMARK;
+            case "FPS" -> HUD_FPS;
+            case "Coordinates" -> HUD_COORDS;
+            case "Target Info" -> HUD_TARGET;
+            case "Keybinds" -> HUD_KEYBINDS;
+            default -> null;
+        };
+    }
+
+    /**
+     * Reads a profile written by an older build (modules "Watermark", "FPS", "Coordinates", "Target Info",
+     * "Keybinds") and carries their on/off states and the two renamed settings into the HUD module.
+     * Does nothing when the profile already has a HUD entry.
+     */
+    public static void migrateLegacyProfile(JsonObject mods) {
+        if (mods == null || mods.has(HUD.name)) return;
+        for (String old : new String[] {"Watermark", "FPS", "Coordinates", "Target Info", "Keybinds"}) {
+            JsonElement el = mods.get(old);
+            if (el == null || !el.isJsonObject()) continue;
+            JsonObject mo = el.getAsJsonObject();
+            JsonElement en = mo.get("enabled");
+            BoolSetting target = legacyHudSwitch(old);
+            if (target != null && en != null && en.isJsonPrimitive() && en.getAsJsonPrimitive().isBoolean()) {
+                target.set(en.getAsBoolean());
+            }
+            JsonElement st = mo.get("settings");
+            if (st != null && st.isJsonObject()) {
+                JsonObject so = st.getAsJsonObject();
+                try {
+                    if (old.equals("Watermark") && so.has("Show FPS")) WATERMARK_FPS.load(so.get("Show FPS"));
+                    if (old.equals("Target Info") && so.has("Hide after (s)")) TARGET_TIMEOUT.load(so.get("Hide after (s)"));
+                } catch (Exception ignored) {
+                    // keep defaults
+                }
+            }
+        }
     }
 
     /** Fires key binds. Edge state is tracked every tick so holding a key never re-triggers later. */
@@ -102,7 +206,11 @@ public final class Modules {
             if (!m.hasBind()) continue;
             boolean pressed = m.pollBind(window);
             if (pressed && mc.currentScreen == null) {
-                m.toggle();
+                if (m == CLICKGUI) {
+                    ClickGuiHost.open(mc, null); // the module mirrors the open window, it is not toggled directly
+                } else {
+                    m.toggle();
+                }
             }
         }
     }

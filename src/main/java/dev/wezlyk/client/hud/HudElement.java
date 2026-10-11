@@ -2,7 +2,8 @@ package dev.wezlyk.client.hud;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import dev.wezlyk.client.module.Module;
+import dev.wezlyk.client.module.Modules;
+import dev.wezlyk.client.setting.BoolSetting;
 import dev.wezlyk.client.theme.Theme;
 import dev.wezlyk.client.theme.Themes;
 import dev.wezlyk.client.ui.Glass;
@@ -15,22 +16,31 @@ import net.minecraft.client.gui.DrawContext;
  * Position = anchor (left/centre/right, top/middle/bottom) plus a pixel offset from that anchor,
  * in GUI-scaled pixels. The anchor is chosen from the screen third the element sits in, so an element
  * stays where the player put it when the window size or GUI scale changes, and is clamped on screen.
- * An element is visible exactly when its module is enabled.
+ * An element is visible exactly when the master HUD module is on AND its own switch in the HUD menu is on.
  */
 public abstract class HudElement {
     public final String id;
-    public final Module module;
+    public final BoolSetting toggle;
     private final int defAx, defAy, defDx, defDy;
     private int ax, ay, dx, dy;
 
-    protected HudElement(String id, Module module, int ax, int ay, int dx, int dy) {
+    protected HudElement(String id, BoolSetting toggle, int ax, int ay, int dx, int dy) {
         this.id = id;
-        this.module = module;
+        this.toggle = toggle;
         this.defAx = ax;
         this.defAy = ay;
         this.defDx = dx;
         this.defDy = dy;
         resetPosition();
+    }
+
+    public final String label() {
+        return toggle.name;
+    }
+
+    /** Master HUD switch and this element's own switch. */
+    public final boolean shown() {
+        return Modules.HUD.enabled() && toggle.get();
     }
 
     public abstract int width(TextRenderer tr);

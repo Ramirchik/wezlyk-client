@@ -3,10 +3,12 @@ package dev.wezlyk.client;
 import dev.wezlyk.client.account.Accounts;
 import dev.wezlyk.client.config.Config;
 import dev.wezlyk.client.config.Profiles;
+import dev.wezlyk.client.fake.FakePlayerManager;
 import dev.wezlyk.client.hud.HudEditor;
 import dev.wezlyk.client.hud.TargetTracker;
 import dev.wezlyk.client.module.Modules;
-import dev.wezlyk.client.ui.ClickGuiScreen;
+import dev.wezlyk.client.render.WorldFx;
+import dev.wezlyk.client.ui.ClickGuiHost;
 import dev.wezlyk.client.ui.Hud;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
@@ -36,7 +38,9 @@ public class WezlykClient implements ClientModInitializer {
         Profiles.init();
 
         openGui = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-            "key.wezlyk.clickgui", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_SHIFT, "category.wezlyk"));
+            "key.wezlyk.clickgui", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, "category.wezlyk"));
+        // The ClickGUI module owns the real key (default Right Shift, changeable in the menu). This extra
+        // vanilla binding is unbound by default and exists so the key can be mapped in Controls (FCL).
 
         ClientLifecycleEvents.CLIENT_STARTED.register(Accounts::init);
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> Profiles.flush());
@@ -46,7 +50,7 @@ public class WezlykClient implements ClientModInitializer {
             Modules.tickBinds(client);
             while (openGui.wasPressed()) {
                 if (client.currentScreen == null) {
-                    client.setScreen(new ClickGuiScreen(null));
+                    ClickGuiHost.open(client, null);
                 }
             }
             if (Modules.SPRINT.enabled() && client.player != null && client.currentScreen == null
@@ -63,6 +67,10 @@ public class WezlykClient implements ClientModInitializer {
         // HUD editor: dragging elements while the chat is open (listeners exist only on ChatScreen).
         HudEditor.register();
 
+        // 3D effects (Jump Circle, China Hat, Predictions) and the local Fake Player.
+        WorldFx.register();
+        FakePlayerManager.register(); // registered before the callback below: it consumes hits on the dummy
+
         // Target Info: remember the last player this client attacked.
         AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
             if (world.isClient && entity instanceof PlayerEntity target && target != player) {
@@ -75,7 +83,7 @@ public class WezlykClient implements ClientModInitializer {
         ScreenEvents.AFTER_INIT.register((client, screen, w, h) -> {
             if (screen instanceof GameMenuScreen) {
                 Screens.getButtons(screen).add(ButtonWidget.builder(Text.literal("Wezlyk"),
-                    b -> client.setScreen(new ClickGuiScreen(screen)))
+                    b -> ClickGuiHost.open(client, screen))
                     .dimensions(w - 62, 6, 56, 20).build());
             }
         });

@@ -31,7 +31,7 @@ public final class HudManager {
         int sw = mc.getWindow().getScaledWidth();
         int sh = mc.getWindow().getScaledHeight();
         for (HudElement e : ELEMENTS) {
-            if (!e.module.enabled()) continue;
+            if (!e.shown()) continue;
             if (!editing && !e.hasContent()) continue;
             int w = e.width(tr);
             int h = e.height();

@@ -4,7 +4,9 @@ import dev.wezlyk.client.config.Profiles;
 import dev.wezlyk.client.module.Category;
 import dev.wezlyk.client.module.Module;
 import dev.wezlyk.client.module.Modules;
+import dev.wezlyk.client.setting.ActionSetting;
 import dev.wezlyk.client.setting.BoolSetting;
+import dev.wezlyk.client.setting.ColorSetting;
 import dev.wezlyk.client.setting.LabelSetting;
 import dev.wezlyk.client.setting.ModeSetting;
 import dev.wezlyk.client.setting.Setting;
@@ -26,7 +28,7 @@ import java.util.Map;
  * Compact centred panel with five sections: Combat, Movement, Render (modules), Themes and Configs.
  * <p>
  * Mouse: LMB toggles a module (or applies a theme / loads a profile), RMB opens the module's settings
- * window, MMB starts key binding. Keyboard: arrows move, Enter/Space activates, B binds, S opens settings,
+ * window (every module has one: at least its Bind row), MMB starts key binding. Keyboard: arrows move, Enter/Space activates, B binds, S opens settings,
  * Right Shift or Esc closes. Everything it shows is read live from the modules, settings and themes.
  */
 public class ClickGuiScreen extends Screen {
@@ -68,7 +70,12 @@ public class ClickGuiScreen extends Screen {
     private Module popup;        // module whose settings window is open
     private long popupAt;
     private SliderSetting dragging;
+    private ColorSetting dragColor;
+    private int dragComp;
     private int dragX, dragW;
+    private int popupScroll;
+    private boolean dragBar;
+    private String pressed;      // key of the toggle currently held down (press animation)
 
     private String message = "";
     private long messageUntil;
@@ -86,6 +93,7 @@ public class ClickGuiScreen extends Screen {
 
     @Override
     protected void init() {
+        Modules.CLICKGUI.setEnabled(true); // the module mirrors this window; never stored
         pw = Math.min(360, width - 16);
         ph = Math.min(height - 12, 240);
         px = (width - pw) / 2;
@@ -153,6 +161,7 @@ public class ClickGuiScreen extends Screen {
         waiting = null;
         popup = null;
         dragging = null;
+        dragColor = null;
         scroll = 0;
         kbFocus = false;
         field.setFocused(false);
@@ -174,6 +183,11 @@ public class ClickGuiScreen extends Screen {
     private void say(String text) {
         message = text;
         messageUntil = System.currentTimeMillis() + 2600;
+    }
+
+    /** Shared animated value for toggles and press feedback; starts at its current state (no slide on open). */
+    private float anim(String key, boolean on, float rate) {
+        return hovers.computeIfAbsent(key, k -> new Anim(on ? 1f : 0f)).to(on ? 1f : 0f, rate);
     }
 
     private float hover(String key, boolean on) {
@@ -225,7 +239,7 @@ public class ClickGuiScreen extends Screen {
 
         // Footer: hint, hovered module description, key binding prompt or the last message
         c.fill(px + 10, footY, px + pw - 10, footY + 1, Glass.SEP);
-        boolean emph = System.currentTimeMillis() < messageUntil || (waiting != null && popup == null);
+        boolean emph = System.currentTimeMillis() < messageUntil || waiting != null;
         Glass.text(c, textRenderer, textRenderer.trimToWidth(footer(mx, my), pw - 28), px + 14, footY + 6,
             emph ? Glass.ACCENT : Glass.MUTED);
 
@@ -238,8 +252,8 @@ public class ClickGuiScreen extends Screen {
 
     private String footer(int mx, int my) {
         if (System.currentTimeMillis() < messageUntil) return message;
-        if (popup != null) return popup.name + " settings   Esc or click outside to close";
         if (waiting != null) return "Press a key for " + waiting.name + "   Esc cancel   Del clear";
+        if (popup != null) return popup.name + " settings   Esc or click outside to close";
         if (page.category != null) {
             List<Module> mods = modules();
             int idx = kbFocus ? sel : rowAt(mx, my);
@@ -247,21 +261,18 @@ public class ClickGuiScreen extends Screen {
                 Module m = mods.get(idx);
                 return m.name + " - " + m.description;
             }
-            return "LMB toggle   RMB settings   MMB bind";
+            return "LMB toggle   RMB settings and bind   MMB bind";
         }
         if (page == Page.THEMES) return "Click a theme to apply it everywhere";
         return "A profile stores modules, binds, settings, theme and HUD layout";
     }
 
-    private void drawSwitch(DrawContext c, int x, int y, float a) {
-        Glass.round(c, x, y, 26, 14, 7, Glass.mix(Glass.SWITCH_OFF, Glass.SWITCH_ON, a));
-        Glass.round(c, x + 2 + Math.round(12 * a), y + 2, 10, 10, 5, Glass.mix(Glass.KNOB_OFF, Glass.KNOB_ON, a));
-    }
-
     private void renderModules(DrawContext c, int mx, int my) {
         List<Module> mods = modules();
         if (mods.isEmpty()) {
-            Glass.centered(c, textRenderer, "No modules in this section", px + pw / 2, cy0 + 12, Glass.MUTED);
+            // Plain message, not a row: nothing here can be clicked.
+            String msg = page == Page.COMBAT ? "SOON..." : "No modules in this section";
+            Glass.centered(c, textRenderer, msg, px + pw / 2, cy0 + (cy1 - cy0) / 2 - 4, Glass.MUTED);
             return;
         }
         int bottom = listBottom();
@@ -280,9 +291,10 @@ public class ClickGuiScreen extends Screen {
             }
 
             int ty = ry + (rh - 8) / 2;
-            int sx = cx1 - 10 - 26;
+            int sx = cx1 - 10 - Toggle.W;
             float a = m.anim.to(m.enabled() ? 1f : 0f);
-            drawSwitch(c, sx, ry + (rh - 14) / 2, a);
+            float press = anim("press:m:" + m.name, ("m:" + m.name).equals(pressed), UiMotion.PRESS_RATE);
+            Toggle.draw(c, sx, ry + (rh - Toggle.H) / 2, a, press);
 
             int right = sx - 8;
             String tag = waiting == m ? "..." : (m.hasBind() ? "[" + m.bindName() + "]" : "");
@@ -373,9 +385,15 @@ public class ClickGuiScreen extends Screen {
 
     // ---- settings window ------------------------------------------------------------------
 
+    private static final int BAR_X = 28;     // colour bars start this far from the window edge
+    private static final int COLOR_H = 98;
+
     private static int rowHeight(Setting<?> s) {
+        if (s == null) return 26;                       // Bind row
+        if (s instanceof ColorSetting) return COLOR_H;
         if (s instanceof ModeSetting) return 40;
         if (s instanceof SliderSetting) return 34;
+        if (s instanceof ActionSetting) return 26;
         if (s instanceof LabelSetting) return 20;
         return 24;
     }
@@ -384,6 +402,8 @@ public class ClickGuiScreen extends Screen {
         List<Row> rows = new ArrayList<>();
         if (popup == null) return rows;
         int y = 30;
+        rows.add(new Row(null, y, rowHeight(null)));
+        y += rowHeight(null);
         for (Setting<?> s : popup.visibleSettings()) {
             int h = rowHeight(s);
             rows.add(new Row(s, y, h));
@@ -393,15 +413,24 @@ public class ClickGuiScreen extends Screen {
     }
 
     private int popupW() {
-        return Math.min(230, pw - 16);
+        return Math.min(240, pw - 16);
     }
 
-    private int popupH(List<Row> rows) {
+    private static int popupEnd(List<Row> rows) {
         int end = 30;
         for (Row r : rows) {
             end = r.y() + r.h();
         }
-        return end + 10;
+        return end;
+    }
+
+    /** Never taller than the panel; longer content scrolls. */
+    private int popupH(List<Row> rows) {
+        return Math.min(popupEnd(rows) + 10, ph - 8);
+    }
+
+    private int popupMaxScroll(List<Row> rows) {
+        return Math.max(0, popupEnd(rows) - (popupH(rows) - 8));
     }
 
     private int popupX() {
@@ -415,8 +444,16 @@ public class ClickGuiScreen extends Screen {
     private void openPopup(Module m) {
         popup = m;
         popupAt = System.nanoTime();
+        popupScroll = 0;
         dragging = null;
+        dragColor = null;
+        dragBar = false;
         waiting = null;
+    }
+
+    private String bindText(Module m) {
+        if (waiting == m) return "...";
+        return m.hasBind() ? m.bindName() : "None";
     }
 
     private void renderPopup(DrawContext c, int mx, int my) {
@@ -425,6 +462,8 @@ public class ClickGuiScreen extends Screen {
         int h = popupH(rows);
         int x = popupX();
         int y = popupY(h);
+        int maxScroll = popupMaxScroll(rows);
+        popupScroll = Math.max(0, Math.min(popupScroll, maxScroll));
         float f = Math.min(1f, (System.nanoTime() - popupAt) / 140_000_000f);
 
         Glass.round(c, px, py, pw, ph, Glass.RADIUS + 2, Glass.alpha(Glass.DIM, 0.75f * f));
@@ -436,46 +475,109 @@ public class ClickGuiScreen extends Screen {
         Glass.centered(c, textRenderer, "×", x + w - 15, y + 9, overClose ? Glass.TEXT : Glass.MUTED);
         c.fill(x + 10, y + 25, x + w - 10, y + 26, Glass.SEP);
 
+        int viewTop = y + 28, viewBottom = y + h - 8;
+        int inner = maxScroll > 0 ? w - 8 : w; // leave room for the scroll bar
+        c.enableScissor(x + 1, viewTop, x + w - 1, viewBottom);
         for (Row r : rows) {
-            Setting<?> s = r.setting();
-            int ry = y + r.y();
-            int ty = ry + (r.h() - 8) / 2;
-            if (s instanceof BoolSetting b) {
-                Glass.text(c, textRenderer, b.name, x + 12, ty, Glass.TEXT);
-                float a = hover("set:" + popup.name + ":" + b.name, b.get());
-                drawSwitch(c, x + w - 12 - 26, ry + (r.h() - 14) / 2, a);
-            } else if (s instanceof ModeSetting m) {
-                Glass.text(c, textRenderer, m.name, x + 12, ry + 4, Glass.MUTED);
-                int n = m.options.size();
-                int cw = (w - 24) / n;
-                for (int k = 0; k < n; k++) {
-                    int chipX = x + 12 + k * cw;
-                    boolean on = m.options.get(k).equals(m.get());
-                    boolean over = mx >= chipX && mx < chipX + cw - 2 && my >= ry + 16 && my < ry + 34;
-                    Glass.round(c, chipX, ry + 16, cw - 2, 18, Glass.RADIUS - 2,
-                        on ? Glass.TAB_SEL : (over ? Glass.CARD_HOVER : Glass.CARD));
-                    if (on) {
-                        Glass.ring(c, chipX, ry + 16, cw - 2, 18, Glass.RADIUS - 2, Glass.SEL_RING);
-                    }
-                    Glass.centered(c, textRenderer, textRenderer.trimToWidth(m.options.get(k), cw - 6),
-                        chipX + (cw - 2) / 2, ry + 21, on ? Glass.TEXT : Glass.MUTED);
+            int ry = y + r.y() - popupScroll;
+            if (ry + r.h() < viewTop || ry > viewBottom) continue;
+            drawPopupRow(c, r, x, ry, inner, mx, my, my >= viewTop && my < viewBottom);
+        }
+        c.disableScissor();
+
+        if (maxScroll > 0) {
+            int trackY = viewTop + 2, trackH = viewBottom - viewTop - 4;
+            int thumbH = Math.max(14, trackH * trackH / (trackH + maxScroll));
+            int thumbY = trackY + Math.round((trackH - thumbH) * (popupScroll / (float) maxScroll));
+            Glass.round(c, x + w - 8, trackY, 3, trackH, 1, Glass.SWITCH_OFF);
+            Glass.round(c, x + w - 8, thumbY, 3, thumbH, 1, dragBar ? Glass.TEXT : Glass.MUTED);
+        }
+    }
+
+    private void drawPopupRow(DrawContext c, Row r, int x, int ry, int w, int mx, int my, boolean mouseInView) {
+        Setting<?> s = r.setting();
+        int ty = ry + (r.h() - 8) / 2;
+        if (s == null) {
+            Glass.text(c, textRenderer, "Bind", x + 12, ty, Glass.TEXT);
+            int bw = 84, bx = x + w - 12 - bw;
+            boolean over = mouseInView && mx >= bx && mx < bx + bw && my >= ry + 3 && my < ry + 23;
+            boolean wait = waiting == popup;
+            Glass.round(c, bx, ry + 3, bw, 20, Glass.RADIUS - 2, over ? Glass.CARD_HOVER : Glass.CARD);
+            Glass.ring(c, bx, ry + 3, bw, 20, Glass.RADIUS - 2, wait ? Glass.ACCENT : Glass.BORDER);
+            Glass.centered(c, textRenderer, textRenderer.trimToWidth(bindText(popup), bw - 8), bx + bw / 2, ry + 9,
+                wait ? Glass.ACCENT : (popup.hasBind() ? Glass.TEXT : Glass.MUTED));
+        } else if (s instanceof BoolSetting b) {
+            Glass.text(c, textRenderer, b.name, x + 12, ty, Glass.TEXT);
+            String key = "s:" + popup.name + ":" + b.name;
+            float a = anim("tog:" + key, b.get(), UiMotion.RATE);
+            float press = anim("press:" + key, key.equals(pressed), UiMotion.PRESS_RATE);
+            Toggle.draw(c, x + w - 12 - Toggle.W, ry + (r.h() - Toggle.H) / 2, a, press);
+        } else if (s instanceof ModeSetting m) {
+            Glass.text(c, textRenderer, m.name, x + 12, ry + 4, Glass.MUTED);
+            int n = m.options.size();
+            int cw = (w - 24) / n;
+            for (int k = 0; k < n; k++) {
+                int chipX = x + 12 + k * cw;
+                boolean on = m.options.get(k).equals(m.get());
+                boolean over = mouseInView && mx >= chipX && mx < chipX + cw - 2 && my >= ry + 16 && my < ry + 34;
+                Glass.round(c, chipX, ry + 16, cw - 2, 18, Glass.RADIUS - 2,
+                    on ? Glass.TAB_SEL : (over ? Glass.CARD_HOVER : Glass.CARD));
+                if (on) {
+                    Glass.ring(c, chipX, ry + 16, cw - 2, 18, Glass.RADIUS - 2, Glass.SEL_RING);
                 }
-            } else if (s instanceof SliderSetting sl) {
-                Glass.text(c, textRenderer, sl.name, x + 12, ry + 4, Glass.MUTED);
-                String v = sl.display();
-                Glass.text(c, textRenderer, v, x + w - 12 - textRenderer.getWidth(v), ry + 4, Glass.TEXT);
-                int tx = x + 12;
-                int tw = w - 24;
-                float frac = (float) ((sl.value() - sl.min) / (sl.max - sl.min));
-                frac = Math.max(0f, Math.min(1f, frac));
-                Glass.round(c, tx, ry + 20, tw, 4, 2, Glass.SWITCH_OFF);
-                Glass.round(c, tx, ry + 20, Math.max(4, Math.round(tw * frac)), 4, 2, Glass.SWITCH_ON);
-                Glass.round(c, tx + Math.round((tw - 8) * frac), ry + 18, 8, 8, 4, Glass.KNOB_ON);
-            } else if (s instanceof LabelSetting l) {
-                Glass.text(c, textRenderer, l.name, x + 12, ty, Glass.MUTED);
-                String v = textRenderer.trimToWidth(l.text(), w - 24 - textRenderer.getWidth(l.name) - 8);
-                Glass.text(c, textRenderer, v, x + w - 12 - textRenderer.getWidth(v), ty, Glass.TEXT);
+                Glass.centered(c, textRenderer, textRenderer.trimToWidth(m.options.get(k), cw - 6),
+                    chipX + (cw - 2) / 2, ry + 21, on ? Glass.TEXT : Glass.MUTED);
             }
+        } else if (s instanceof SliderSetting sl) {
+            Glass.text(c, textRenderer, sl.name, x + 12, ry + 4, Glass.MUTED);
+            String v = sl.display();
+            Glass.text(c, textRenderer, v, x + w - 12 - textRenderer.getWidth(v), ry + 4, Glass.TEXT);
+            int tx = x + 12;
+            int tw = w - 24;
+            float frac = (float) ((sl.value() - sl.min) / (sl.max - sl.min));
+            frac = Math.max(0f, Math.min(1f, frac));
+            Glass.round(c, tx, ry + 20, tw, 4, 2, Glass.SWITCH_OFF);
+            Glass.round(c, tx, ry + 20, Math.max(4, Math.round(tw * frac)), 4, 2, Glass.SWITCH_ON);
+            Glass.round(c, tx + Math.round((tw - 8) * frac), ry + 18, 8, 8, 4, Glass.TEXT);
+        } else if (s instanceof ColorSetting col) {
+            drawColor(c, col, x, ry, w);
+        } else if (s instanceof ActionSetting a) {
+            boolean over = mouseInView && mx >= x + 12 && mx < x + w - 12 && my >= ry + 3 && my < ry + 23;
+            Glass.round(c, x + 12, ry + 3, w - 24, 20, Glass.RADIUS - 2, over ? Glass.CARD_HOVER : Glass.CARD);
+            Glass.ring(c, x + 12, ry + 3, w - 24, 20, Glass.RADIUS - 2, over ? Glass.SEL_RING : Glass.BORDER);
+            Glass.centered(c, textRenderer, a.name, x + w / 2, ry + 9, Glass.TEXT);
+        } else if (s instanceof LabelSetting l) {
+            Glass.text(c, textRenderer, l.name, x + 12, ty, Glass.MUTED);
+            String v = textRenderer.trimToWidth(l.text(), w - 24 - textRenderer.getWidth(l.name) - 8);
+            Glass.text(c, textRenderer, v, x + w - 12 - textRenderer.getWidth(v), ty, Glass.TEXT);
+        }
+    }
+
+    /** Real HSL palette: live preview plus three bars (hue, saturation, lightness) that show their own range. */
+    private void drawColor(DrawContext c, ColorSetting col, int x, int ry, int w) {
+        Glass.text(c, textRenderer, col.name, x + 12, ry + 4, Glass.MUTED);
+        int pvw = 34;
+        Glass.round(c, x + w - 12 - pvw, ry + 2, pvw, 12, 4, 0xFF000000 | col.rgb());
+        Glass.ring(c, x + w - 12 - pvw, ry + 2, pvw, 12, 4, Glass.BORDER);
+
+        String[] letters = {"H", "S", "L"};
+        int bx = x + BAR_X, bw = w - BAR_X - 12;
+        for (int k = 0; k < 3; k++) {
+            int by = ry + 22 + k * 24;
+            Glass.text(c, textRenderer, letters[k], x + 12, by + 3, Glass.MUTED);
+            for (int sx = 0; sx < bw; sx += 3) {
+                float t = (sx + 1.5f) / bw;
+                int rgb = switch (k) {
+                    case 0 -> ColorSetting.hsl(t, col.saturation(), col.lightness());
+                    case 1 -> ColorSetting.hsl(col.hue(), t, col.lightness());
+                    default -> ColorSetting.hsl(col.hue(), col.saturation(), t);
+                };
+                c.fill(bx + sx, by + 2, bx + Math.min(sx + 3, bw), by + 12, 0xFF000000 | rgb);
+            }
+            Glass.ring(c, bx, by + 2, bw, 10, 3, Glass.BORDER);
+            int kx = bx + Math.round((bw - 4) * col.component(k));
+            Glass.round(c, kx, by, 4, 14, 2, Glass.TEXT);
+            Glass.ring(c, kx, by, 4, 14, 2, Glass.BG);
         }
     }
 
@@ -489,23 +591,46 @@ public class ClickGuiScreen extends Screen {
         if (!inside) {
             popup = null;
             dragging = null;
+            dragColor = null;
             return true;
         }
-        if (button != 0) return true;
-        if (mx >= x + w - 26 && my < y + 24) {
+        if (button == 0 && mx >= x + w - 26 && my < y + 24) {
             popup = null;
             return true;
         }
+        int viewTop = y + 28, viewBottom = y + h - 8;
+        if (my < viewTop || my >= viewBottom) return true;
+        int maxScroll = popupMaxScroll(rows);
+        if (button == 0 && maxScroll > 0 && mx >= x + w - 12) {
+            dragBar = true;
+            barTo(my, y, h, maxScroll);
+            return true;
+        }
+        int inner = maxScroll > 0 ? w - 8 : w;
         for (Row r : rows) {
-            int ry = y + r.y();
+            int ry = y + r.y() - popupScroll;
             if (my < ry || my >= ry + r.h()) continue;
             Setting<?> s = r.setting();
+            if (s == null) {
+                // Bind row: left click chooses, right click clears.
+                if (mx >= x + inner - 12 - 84 && mx < x + inner - 12) {
+                    if (button == 0) {
+                        startBind(popup);
+                    } else if (button == 1) {
+                        popup.setBind(GLFW.GLFW_KEY_UNKNOWN);
+                        say(popup.name + ": bind cleared");
+                    }
+                }
+                break;
+            }
+            if (button != 0) break;
             if (s instanceof BoolSetting b) {
                 b.toggle();
+                pressed = "s:" + popup.name + ":" + b.name;
             } else if (s instanceof ModeSetting m) {
                 if (my >= ry + 16 && my < ry + 34) {
                     int n = m.options.size();
-                    int idx = (int) ((mx - (x + 12)) / ((w - 24) / n));
+                    int idx = (int) ((mx - (x + 12)) / ((inner - 24) / n));
                     if (idx >= 0 && idx < n) {
                         m.choose(m.options.get(idx));
                     }
@@ -513,17 +638,41 @@ public class ClickGuiScreen extends Screen {
             } else if (s instanceof SliderSetting sl) {
                 dragging = sl;
                 dragX = x + 12;
-                dragW = w - 24;
+                dragW = inner - 24;
                 sliderTo(mx);
+            } else if (s instanceof ColorSetting col) {
+                int rel = (int) (my - ry) - 20;
+                if (rel >= 0 && rel < 72) {
+                    dragColor = col;
+                    dragComp = rel / 24;
+                    dragX = x + BAR_X;
+                    dragW = inner - BAR_X - 12;
+                    sliderTo(mx);
+                }
+            } else if (s instanceof ActionSetting a) {
+                if (mx >= x + 12 && mx < x + inner - 12 && my >= ry + 3 && my < ry + 23) {
+                    say(a.run());
+                }
             }
             break;
         }
         return true;
     }
 
+    private void barTo(double my, int y, int h, int maxScroll) {
+        int trackY = y + 30, trackH = h - 42;
+        double f = Math.max(0.0, Math.min(1.0, (my - trackY) / Math.max(1, trackH)));
+        popupScroll = (int) Math.round(f * maxScroll);
+    }
+
+    /** Drives whichever slider or colour bar is being dragged. */
     private void sliderTo(double mx) {
-        double f = Math.max(0.0, Math.min(1.0, (mx - dragX) / dragW));
-        dragging.setSnapped(dragging.min + f * (dragging.max - dragging.min));
+        double f = Math.max(0.0, Math.min(1.0, (mx - dragX) / Math.max(1, dragW)));
+        if (dragging != null) {
+            dragging.setSnapped(dragging.min + f * (dragging.max - dragging.min));
+        } else if (dragColor != null) {
+            dragColor.setComponent(dragComp, (float) f);
+        }
     }
 
     // ---- actions --------------------------------------------------------------------------
@@ -602,7 +751,16 @@ public class ClickGuiScreen extends Screen {
         } else if (page == Page.CONFIGS) {
             loadProfile(profiles.get(idx));
         } else {
-            modules().get(idx).toggle();
+            toggleModule(modules().get(idx));
+        }
+    }
+
+    /** The ClickGUI module mirrors this window, so switching it off means closing the window. */
+    private void toggleModule(Module m) {
+        if (m == Modules.CLICKGUI) {
+            close();
+        } else {
+            m.toggle();
         }
     }
 
@@ -656,13 +814,10 @@ public class ClickGuiScreen extends Screen {
                 kbFocus = false;
                 Module m = modules().get(idx);
                 if (button == 0) {
-                    m.toggle();
+                    pressed = "m:" + m.name;
+                    toggleModule(m);
                 } else if (button == 1) {
-                    if (m.hasSettings()) {
-                        openPopup(m);
-                    } else {
-                        say(m.name + " has no settings");
-                    }
+                    openPopup(m); // right click never toggles the module
                 } else if (button == 2) {
                     startBind(m);
                 }
@@ -698,8 +853,14 @@ public class ClickGuiScreen extends Screen {
 
     @Override
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
-        if (dragging != null && button == 0) {
+        if (button == 0 && (dragging != null || dragColor != null)) {
             sliderTo(mx);
+            return true;
+        }
+        if (button == 0 && dragBar && popup != null) {
+            List<Row> rows = popupRows();
+            int h = popupH(rows);
+            barTo(my, popupY(h), h, popupMaxScroll(rows));
             return true;
         }
         return super.mouseDragged(mx, my, button, dx, dy);
@@ -708,12 +869,18 @@ public class ClickGuiScreen extends Screen {
     @Override
     public boolean mouseReleased(double mx, double my, int button) {
         dragging = null;
+        dragColor = null;
+        dragBar = false;
+        pressed = null;
         return super.mouseReleased(mx, my, button);
     }
 
     @Override
     public boolean mouseScrolled(double mx, double my, double horizontal, double vertical) {
-        if (popup != null) return true;
+        if (popup != null) {
+            popupScroll = Math.max(0, Math.min(popupMaxScroll(popupRows()), popupScroll - (int) (vertical * 18)));
+            return true;
+        }
         scroll -= (int) (vertical * ROW);
         clampScroll();
         return true;
@@ -729,6 +896,10 @@ public class ClickGuiScreen extends Screen {
             if (keyCode == GLFW.GLFW_KEY_ESCAPE || keyCode == GLFW.GLFW_KEY_S) {
                 popup = null;
                 dragging = null;
+                dragColor = null;
+            } else if (keyCode == GLFW.GLFW_KEY_DOWN || keyCode == GLFW.GLFW_KEY_UP) {
+                popupScroll = Math.max(0, Math.min(popupMaxScroll(popupRows()),
+                    popupScroll + (keyCode == GLFW.GLFW_KEY_DOWN ? 18 : -18)));
             }
             return true;
         }
@@ -745,7 +916,8 @@ public class ClickGuiScreen extends Screen {
             return field.keyPressed(keyCode, scanCode, modifiers);
         }
 
-        if (keyCode == GLFW.GLFW_KEY_RIGHT_SHIFT) {
+        if (keyCode == GLFW.GLFW_KEY_RIGHT_SHIFT
+            || (Modules.CLICKGUI.hasBind() && keyCode == Modules.CLICKGUI.bind())) {
             close();
             return true;
         }
@@ -778,11 +950,7 @@ public class ClickGuiScreen extends Screen {
                 return true;
             }
             if (keyCode == GLFW.GLFW_KEY_S) {
-                if (m.hasSettings()) {
-                    openPopup(m);
-                } else {
-                    say(m.name + " has no settings");
-                }
+                openPopup(m);
                 return true;
             }
         }
@@ -800,6 +968,7 @@ public class ClickGuiScreen extends Screen {
 
     @Override
     public void removed() {
+        Modules.CLICKGUI.setEnabled(false);
         Profiles.flush();
         super.removed();
     }
